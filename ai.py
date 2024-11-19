@@ -29,5 +29,6 @@ def process(wav_data: bytes) -> bytes:
         ]
     )
 
+    print(completion.choices[0].message.audio.transcript)
     wav_bytes = base64.b64decode(completion.choices[0].message.audio.data)
     return wav_bytes

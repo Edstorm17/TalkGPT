@@ -3,44 +3,57 @@ from io import BytesIO
 import wave
 import sys
 import pyaudio
+import threading
 
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 1 if sys.platform == 'darwin' else 2
 RATE = 44100
-RECORD_SECONDS = 5
 
-data = BytesIO()
+def wait_for_recording():
+    input("Recording, press enter to proceed...\n")
+    global running
+    running = False
 
-with wave.open(data, 'wb') as wf:
-    p = pyaudio.PyAudio()
-    wf.setnchannels(CHANNELS)
-    wf.setsampwidth(p.get_sample_size(FORMAT))
-    wf.setframerate(RATE)
+def record() -> bytes:
+    global running
+    data = BytesIO()
 
-    stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True)
+    with wave.open(data, 'wb') as wf:
+        p = pyaudio.PyAudio()
+        wf.setnchannels(CHANNELS)
+        wf.setsampwidth(p.get_sample_size(FORMAT))
+        wf.setframerate(RATE)
 
-    print('Recording...')
-    for _ in range(0, RATE // CHUNK * RECORD_SECONDS):
-        wf.writeframes(stream.read(CHUNK))
-    print('Done!')
+        stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True)
 
-    stream.close()
-    p.terminate()
+        running = True
 
+        input_thread = threading.Thread(target=wait_for_recording)
+        input_thread.daemon = True
+        input_thread.start()
 
-output = BytesIO(ai.process(data.getvalue()))
+        while running:
+            wf.writeframes(stream.read(CHUNK))
 
-with wave.open(output, 'rb') as wf:
-    p = pyaudio.PyAudio()
+        stream.close()
+        p.terminate()
 
-    stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
-                    channels=wf.getnchannels(),
-                    rate=wf.getframerate(),
-                    output=True)
+    return data.getvalue()
 
-    while len(data := wf.readframes(CHUNK)):
-        stream.write(data)
+def play_response(output: bytes):
+    with wave.open(BytesIO(output), 'rb') as wf:
+        p = pyaudio.PyAudio()
 
-    stream.close()
-    p.terminate()
+        stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
+                        channels=wf.getnchannels(),
+                        rate=wf.getframerate(),
+                        output=True)
+
+        while len(data := wf.readframes(CHUNK)):
+            stream.write(data)
+
+        stream.close()
+        p.terminate()
+
+play_response(ai.process(record()))
